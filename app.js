@@ -36,7 +36,8 @@ const ICONS = {
   pin: '<path d="M12 17v5"/><path d="M9 10.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24V16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V7a1 1 0 0 1 1-1 2 2 0 0 0 0-4H8a2 2 0 0 0 0 4 1 1 0 0 1 1 1z"/>',
   restore: '<path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/>',
   tag: '<path d="M12.586 2.586A2 2 0 0 0 11.172 2H4a2 2 0 0 0-2 2v7.172a2 2 0 0 0 .586 1.414l8.704 8.704a2.426 2.426 0 0 0 3.42 0l6.58-6.58a2.426 2.426 0 0 0 0-3.42z"/><circle cx="7.5" cy="7.5" r=".5" fill="currentColor"/>',
-  x: '<path d="M18 6 6 18M6 6l12 12"/>'
+  x: '<path d="M18 6 6 18M6 6l12 12"/>',
+  eye: '<path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/>'
 };
 
 function icon(name, size = 20) {
@@ -79,7 +80,7 @@ const quickbar = $('#quickbar');
 const appNameEl = $('#app-name');
 const appSubEl = $('#app-sub');
 const btnTrashBack = $('#btn-trash-back');
-const APP_VERSION = 'v9';
+const APP_VERSION = 'v10';
 
 /* ---------------- 状态 ---------------- */
 let db = null;
@@ -610,6 +611,7 @@ async function exitToNotes() {
   currentCreatedAt = null;
   clearTimeout(saveTimer);
   isPreview = false;
+  isFocusMode = false;
   editor.value = '';
   titleInput.value = '';
   editorView.classList.remove('active', 'immersive');
@@ -661,6 +663,7 @@ function setMode(mode) {
     toolbar.style.display = 'none';
     quickbar.hidden = true;
     editorView.classList.remove('immersive');
+    isFocusMode = false;
     btnEditMode.setAttribute('aria-selected', 'false');
     btnPreviewMode.setAttribute('aria-selected', 'true');
     editor.blur();
@@ -836,19 +839,16 @@ function insertQuick(item) {
   editor.setSelectionRange(pos, pos);
 }
 
-/* 沉浸写作：向下滚动隐藏工具栏/底栏，向上滚动恢复 */
-let lastScrollTop = 0;
-function setupImmersive() {
-  editor.addEventListener('scroll', () => {
-    const st = editor.scrollTop;
-    const delta = st - lastScrollTop;
-    if (delta > 4 && st > 30) {
-      editorView.classList.add('immersive');
-    } else if (delta < -4) {
-      editorView.classList.remove('immersive');
-    }
-    lastScrollTop = st;
-  }, { passive: true });
+/* 专注模式：手动开关，收起工具栏/快捷栏/底栏 */
+let isFocusMode = false;
+function toggleFocusMode() {
+  isFocusMode = !isFocusMode;
+  if (isFocusMode) {
+    editorView.classList.add('immersive');
+    toast('已进入专注模式，点右上角「⋯」退出');
+  } else {
+    editorView.classList.remove('immersive');
+  }
 }
 
 /* ---------------- 底部面板 / 对话框 ---------------- */
@@ -1011,6 +1011,7 @@ function openEditorMenu() {
   const pinned = cur && cur.pinned;
   showSheet('笔记', [
     { icon: 'pin', label: pinned ? '取消置顶' : '置顶', action: togglePinCurrent },
+    { icon: 'eye', label: isFocusMode ? '退出专注模式' : '专注模式', action: toggleFocusMode },
     { icon: 'image', label: '插入本地图片', action: () => fileImage.click() },
     { icon: 'tag', label: '编辑标签', action: editTags },
     { icon: 'download', label: '导出为 .md', action: exportCurrent },
@@ -1310,7 +1311,6 @@ async function init() {
   await purgeOldTrash();
   await renderList();
   renderQuickbar();
-  setupImmersive();
   registerSW();
 
   // 版本更新检查：打开后、回到前台时、每 30 分钟一次
