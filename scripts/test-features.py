@@ -33,7 +33,7 @@ with sync_playwright() as p:
     page.locator(".note-item", has_text="重要笔记").click()
     page.wait_for_selector("#editor-view.active")
     page.click("#btn-editor-more")
-    page.click("text=置顶")
+    page.locator("#sheet .sheet-item", has_text="置顶").click()
     page.wait_for_timeout(300)
     page.click("#btn-back")
     page.wait_for_selector("#list-view.active")
@@ -49,11 +49,15 @@ with sync_playwright() as p:
     page.fill("#search", "")
     page.wait_for_timeout(300)
 
-    # ---- 回收站 ----
-    page.locator("li", has_text="普通笔记").locator(".note-item-del").click()
+    # ---- 回收站（通过编辑器菜单删除）----
+    page.locator(".note-item", has_text="普通笔记").click()
+    page.wait_for_selector("#editor-view.active")
+    page.click("#btn-editor-more")
+    page.locator("#sheet .sheet-item", has_text="删除此篇").click()
     page.wait_for_selector("#dialog:not([hidden])")
     page.click("#dialog-confirm")
     page.wait_for_selector("#dialog", state="hidden", timeout=5000)
+    page.wait_for_selector("#list-view.active")
     page.wait_for_timeout(400)
     check("删除后列表只剩1篇", page.locator(".note-item").count() == 1)
 

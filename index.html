@@ -37,6 +37,8 @@
       <input id="search" class="search-input" type="search" placeholder="搜索笔记…" autocomplete="off">
     </div>
 
+    <div id="filter-bar" class="filter-bar" hidden></div>
+
     <ul id="note-list" class="note-list" aria-label="笔记列表"></ul>
 
     <div id="empty-state" class="empty-state" hidden>
@@ -103,6 +105,7 @@
   <!-- 隐藏的文件输入 -->
   <input type="file" id="file-md" accept=".md,.markdown,.txt,text/markdown,text/plain" hidden>
   <input type="file" id="file-json" accept=".json,application/json" hidden>
+  <input type="file" id="file-image" accept="image/*" hidden>
 
   <!-- 打印 / 导出 PDF 专用区域（屏幕隐藏，打印时显示） -->
   <div id="print-area" class="print-area" aria-hidden="true"></div>

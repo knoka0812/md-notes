@@ -34,7 +34,9 @@ const ICONS = {
   image: '<rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/>',
   table: '<path d="M12 3v18"/><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18"/><path d="M3 15h18"/>',
   pin: '<path d="M12 17v5"/><path d="M9 10.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24V16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V7a1 1 0 0 1 1-1 2 2 0 0 0 0-4H8a2 2 0 0 0 0 4 1 1 0 0 1 1 1z"/>',
-  restore: '<path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/>'
+  restore: '<path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/>',
+  tag: '<path d="M12.586 2.586A2 2 0 0 0 11.172 2H4a2 2 0 0 0-2 2v7.172a2 2 0 0 0 .586 1.414l8.704 8.704a2.426 2.426 0 0 0 3.42 0l6.58-6.58a2.426 2.426 0 0 0 0-3.42z"/><circle cx="7.5" cy="7.5" r=".5" fill="currentColor"/>',
+  x: '<path d="M18 6 6 18M6 6l12 12"/>'
 };
 
 function icon(name, size = 20) {
@@ -70,12 +72,14 @@ const dialogConfirm = $('#dialog-confirm');
 const toastEl = $('#toast');
 const fileMd = $('#file-md');
 const fileJson = $('#file-json');
+const fileImage = $('#file-image');
+const filterBar = $('#filter-bar');
 const printArea = $('#print-area');
 const quickbar = $('#quickbar');
 const appNameEl = $('#app-name');
 const appSubEl = $('#app-sub');
 const btnTrashBack = $('#btn-trash-back');
-const APP_VERSION = 'v6';
+const APP_VERSION = 'v7';
 
 /* ---------------- 状态 ---------------- */
 let db = null;
@@ -86,6 +90,8 @@ let saveTimer = null;
 let isPreview = false;
 let isTrashMode = false;
 let currentPinned = false;
+let currentTags = [];
+let currentTag = null;      // 当前按标签筛选
 const isTouch = window.matchMedia('(pointer: coarse)').matches;
 
 /* 安装完成提示（通过浏览器菜单安装后触发） */
@@ -271,7 +277,10 @@ function renderMarkdown(md) {
 async function renderList() {
   notes = isTrashMode ? await getTrashedNotes() : await getActiveNotes();
   const f = searchInput.value.trim().toLowerCase();
-  const filtered = f ? notes.filter((n) => (n.title + ' ' + n.content).toLowerCase().includes(f)) : notes;
+  let filtered = notes;
+  if (!isTrashMode && currentTag) filtered = filtered.filter((n) => (n.tags || []).includes(currentTag));
+  if (f) filtered = filtered.filter((n) => (n.title + ' ' + n.content).toLowerCase().includes(f));
+  updateFilterBar();
 
   noteList.innerHTML = '';
 
@@ -294,6 +303,21 @@ async function renderList() {
   filtered.forEach((n) => noteList.appendChild(buildItem(n, f)));
 }
 
+function updateFilterBar() {
+  if (!isTrashMode && currentTag) {
+    filterBar.hidden = false;
+    filterBar.innerHTML = '<span class="filter-label">标签：</span><span class="filter-chip">' + escapeHTML(currentTag) + '</span>';
+    const clear = document.createElement('button');
+    clear.className = 'filter-clear';
+    clear.setAttribute('aria-label', '清除标签筛选');
+    clear.innerHTML = icon('x', 15);
+    clear.addEventListener('click', () => { currentTag = null; renderList(); });
+    filterBar.appendChild(clear);
+  } else {
+    filterBar.hidden = true;
+  }
+}
+
 function buildItem(n, query) {
   const li = document.createElement('li');
   const title = n.title || '';
@@ -304,6 +328,7 @@ function buildItem(n, query) {
   main.className = 'note-item';
 
   if (isTrashMode) {
+    main.classList.add('note-item-trash');
     main.innerHTML = `
       <p class="note-item-title ${title ? '' : 'is-untitled'}">${highlightText(title || '无标题', query)}</p>
       <p class="note-item-snippet">${highlightText(snip, query) || '&nbsp;'}</p>
@@ -313,22 +338,12 @@ function buildItem(n, query) {
       toast('已恢复');
       await renderList();
     });
-  } else {
-    const pin = n.pinned ? '<span class="note-item-pin">' + icon('pin', 15) + '</span>' : '';
-    main.innerHTML = `
-      <p class="note-item-title ${title ? '' : 'is-untitled'}">${pin}${highlightText(title || '无标题', query)}</p>
-      <p class="note-item-snippet">${highlightText(snip, query) || '&nbsp;'}</p>
-      <div class="note-item-meta"><span>${relativeTime(n.updatedAt)}</span><span>${countWords(n.content)} 字</span></div>`;
-    main.addEventListener('click', () => openNote(n.id));
-  }
 
-  const del = document.createElement('button');
-  del.type = 'button';
-  del.className = 'note-item-del icon-btn';
-  del.innerHTML = icon('trash', 18);
-
-  if (isTrashMode) {
+    const del = document.createElement('button');
+    del.type = 'button';
+    del.className = 'note-item-del icon-btn';
     del.setAttribute('aria-label', '彻底删除');
+    del.innerHTML = icon('trash', 18);
     del.addEventListener('click', (e) => {
       e.stopPropagation();
       confirmDialog({
@@ -341,31 +356,147 @@ function buildItem(n, query) {
         }
       });
     });
-  } else {
-    del.setAttribute('aria-label', '删除');
-    del.addEventListener('click', (e) => {
-      e.stopPropagation();
-      confirmDialog({
-        message: `删除「${n.title || '无标题'}」？将移入回收站，30 天内可恢复。`,
-        confirmLabel: '删除', danger: true,
-        onConfirm: async () => {
-          await softDelete(n.id);
-          if (currentId === n.id) { currentId = null; clearTimeout(saveTimer); }
-          toast('已移入回收站');
-          await renderList();
-        }
-      });
-    });
+    li.appendChild(main);
+    li.appendChild(del);
+    return li;
   }
 
+  /* ---- 正常模式：左滑露出 置顶 / 删除 ---- */
+  const pin = n.pinned ? '<span class="note-item-pin">' + icon('pin', 15) + '</span>' : '';
+  main.innerHTML = `
+    <p class="note-item-title ${title ? '' : 'is-untitled'}">${pin}${highlightText(title || '无标题', query)}</p>
+    <p class="note-item-snippet">${highlightText(snip, query) || '&nbsp;'}</p>
+    <div class="note-item-meta"><span>${relativeTime(n.updatedAt)}</span><span>${countWords(n.content)} 字</span></div>`;
+  main.addEventListener('click', () => {
+    if (openSwipeEl === li) { closeOpenSwipe(null); return; }
+    openNote(n.id);
+  });
+
+  const tags = n.tags || [];
+  if (tags.length) {
+    const tagRow = document.createElement('div');
+    tagRow.className = 'note-item-tags';
+    tags.forEach((t) => {
+      const chip = document.createElement('span');
+      chip.className = 'tag-chip';
+      chip.textContent = t;
+      chip.setAttribute('role', 'button');
+      chip.setAttribute('tabindex', '0');
+      chip.addEventListener('click', (e) => {
+        e.stopPropagation();
+        currentTag = t;
+        searchInput.value = '';
+        renderList();
+      });
+      tagRow.appendChild(chip);
+    });
+    main.appendChild(tagRow);
+  }
+
+  li.className = 'note-swipe';
+  const actions = document.createElement('div');
+  actions.className = 'note-swipe-actions';
+
+  const pinBtn = document.createElement('button');
+  pinBtn.type = 'button';
+  pinBtn.className = 'swipe-btn';
+  pinBtn.innerHTML = icon('pin', 18) + '<span>' + (n.pinned ? '取消置顶' : '置顶') + '</span>';
+  pinBtn.addEventListener('click', (e) => { e.stopPropagation(); togglePinFromList(n); });
+
+  const delBtn = document.createElement('button');
+  delBtn.type = 'button';
+  delBtn.className = 'swipe-btn swipe-btn-danger';
+  delBtn.innerHTML = icon('trash', 18) + '<span>删除</span>';
+  delBtn.addEventListener('click', (e) => { e.stopPropagation(); confirmDeleteFromList(n); });
+
+  actions.appendChild(pinBtn);
+  actions.appendChild(delBtn);
+  li.appendChild(actions);
   li.appendChild(main);
-  li.appendChild(del);
+  attachSwipe(main, actions, li);
   return li;
+}
+
+/* ---------------- 左滑手势 ---------------- */
+let openSwipeEl = null;
+
+async function togglePinFromList(n) {
+  n.pinned = !n.pinned;
+  await putNote(n);
+  const idx = notes.findIndex((x) => x.id === n.id);
+  if (idx >= 0) notes[idx] = n;
+  toast(n.pinned ? '已置顶' : '已取消置顶');
+  await renderList();
+}
+
+function confirmDeleteFromList(n) {
+  confirmDialog({
+    message: `删除「${n.title || '无标题'}」？将移入回收站，30 天内可恢复。`,
+    confirmLabel: '删除', danger: true,
+    onConfirm: async () => {
+      await softDelete(n.id);
+      if (currentId === n.id) { currentId = null; clearTimeout(saveTimer); }
+      toast('已移入回收站');
+      await renderList();
+    }
+  });
+}
+
+function closeOpenSwipe(except) {
+  if (openSwipeEl && openSwipeEl !== except) {
+    const f = openSwipeEl.querySelector('.note-item');
+    if (f) f.style.transform = 'translateX(0)';
+  }
+  if (openSwipeEl !== except) openSwipeEl = null;
+}
+
+function attachSwipe(front, actions, li) {
+  let startX = 0, startY = 0, baseX = 0, dragging = false;
+  const getW = () => actions.offsetWidth || 148;
+
+  front.addEventListener('touchstart', (e) => {
+    const t = e.touches[0];
+    startX = t.clientX; startY = t.clientY;
+    baseX = openSwipeEl === li ? -getW() : 0;
+    dragging = false;
+  }, { passive: true });
+
+  front.addEventListener('touchmove', (e) => {
+    const t = e.touches[0];
+    const dx = t.clientX - startX;
+    const dy = t.clientY - startY;
+    if (!dragging && Math.abs(dx) > 8 && Math.abs(dx) > Math.abs(dy)) {
+      dragging = true;
+      closeOpenSwipe(li);
+      front.classList.add('swiping');
+    }
+    if (!dragging) return;
+    const W = getW();
+    let x = baseX + dx;
+    x = Math.max(-W, Math.min(0, x));
+    front.style.transform = 'translateX(' + x + 'px)';
+    if (e.cancelable) e.preventDefault();
+  }, { passive: false });
+
+  front.addEventListener('touchend', () => {
+    if (!dragging) return;
+    front.classList.remove('swiping');
+    const W = getW();
+    const cur = parseFloat(front.style.transform.replace(/[^-\d.]/g, '')) || 0;
+    if (cur < -W / 2) {
+      front.style.transform = 'translateX(-' + W + 'px)';
+      openSwipeEl = li;
+    } else {
+      front.style.transform = 'translateX(0)';
+      openSwipeEl = null;
+    }
+  });
 }
 
 /* 进入 / 退出回收站 */
 function enterTrash() {
   isTrashMode = true;
+  currentTag = null;
   btnTrashBack.hidden = false;
   appNameEl.textContent = '回收站';
   appSubEl.innerHTML = '删除的笔记保留 30 天 <span class="app-version">' + APP_VERSION + '</span>';
@@ -390,6 +521,7 @@ async function openNote(id) {
   currentId = note.id;
   currentCreatedAt = note.createdAt;
   currentPinned = note.pinned || false;
+  currentTags = note.tags || [];
   titleInput.value = note.title || '';
   editor.value = note.content || '';
   setMode('edit');
@@ -416,7 +548,8 @@ async function saveNow() {
     content: editor.value,
     createdAt: currentCreatedAt || Date.now(),
     updatedAt: Date.now(),
-    pinned: currentPinned
+    pinned: currentPinned,
+    tags: currentTags
   };
   await putNote(note);
   const idx = notes.findIndex((n) => n.id === currentId);
@@ -437,7 +570,7 @@ async function exitToNotes() {
   isPreview = false;
   editor.value = '';
   titleInput.value = '';
-  editorView.classList.remove('active');
+  editorView.classList.remove('active', 'immersive');
   listView.classList.add('active');
   window.scrollTo(0, 0);
   await renderList();
@@ -484,6 +617,7 @@ function setMode(mode) {
     editor.hidden = true;
     preview.hidden = false;
     toolbar.style.display = 'none';
+    editorView.classList.remove('immersive');
     btnEditMode.setAttribute('aria-selected', 'false');
     btnPreviewMode.setAttribute('aria-selected', 'true');
     editor.blur();
@@ -685,6 +819,22 @@ function setupQuickbar() {
   }
 }
 
+/* 沉浸写作：向下滚动隐藏工具栏/底栏，向上滚动恢复 */
+let lastScrollTop = 0;
+function setupImmersive() {
+  editor.addEventListener('scroll', () => {
+    const st = editor.scrollTop;
+    const delta = st - lastScrollTop;
+    if (delta > 4 && st > 30) {
+      editorView.classList.add('immersive');
+      hideQuickbar();
+    } else if (delta < -4) {
+      editorView.classList.remove('immersive');
+    }
+    lastScrollTop = st;
+  }, { passive: true });
+}
+
 /* ---------------- 底部面板 / 对话框 ---------------- */
 function showSheet(title, items) {
   sheetTitle.textContent = title;
@@ -746,6 +896,76 @@ async function togglePinCurrent() {
   toast(n.pinned ? '已置顶' : '已取消置顶');
 }
 
+/* 本地图片：读取 → 压缩 → 以 base64 嵌入 Markdown */
+function resizeImage(file, maxDim = 1600) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const img = new Image();
+      img.onload = () => {
+        let w = img.naturalWidth, h = img.naturalHeight;
+        if (w > maxDim || h > maxDim) {
+          const s = Math.min(maxDim / w, maxDim / h);
+          w = Math.round(w * s); h = Math.round(h * s);
+        }
+        const canvas = document.createElement('canvas');
+        canvas.width = w; canvas.height = h;
+        const ctx = canvas.getContext('2d');
+        ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, w, h);
+        ctx.drawImage(img, 0, 0, w, h);
+        resolve(canvas.toDataURL('image/jpeg', 0.85));
+      };
+      img.onerror = () => reject(new Error('图片加载失败'));
+      img.src = reader.result;
+    };
+    reader.onerror = () => reject(new Error('读取失败'));
+    reader.readAsDataURL(file);
+  });
+}
+
+async function insertLocalImage(file) {
+  if (!file) return;
+  toast('正在压缩图片…');
+  try {
+    const dataUrl = await resizeImage(file);
+    const name = (file.name || '图片').replace(/\.[^.]+$/, '');
+    const s = getSel();
+    replaceSelection('![' + name + '](' + dataUrl + ')', s.start, s.end);
+    toast('图片已插入');
+  } catch (e) {
+    toast('图片处理失败');
+  }
+}
+
+/* 标签编辑 */
+function editTags() {
+  if (!currentId) return;
+  const input = document.createElement('input');
+  input.type = 'text';
+  input.value = currentTags.join(' ');
+  input.placeholder = '用空格或逗号分隔，例如：工作 灵感';
+  input.className = 'dialog-input';
+  dialogMessage.textContent = '';
+  dialogMessage.appendChild(document.createTextNode('给这篇笔记打标签：'));
+  dialogMessage.appendChild(document.createElement('br'));
+  dialogMessage.appendChild(input);
+  dialogConfirm.textContent = '保存';
+  dialogConfirm.className = 'btn btn-primary';
+  dialogCancel.hidden = false;
+  dialogCancel.textContent = '取消';
+  dialogConfirm.onclick = async () => {
+    const tags = input.value.split(/[,\s，、]+/).map((t) => t.trim()).filter(Boolean);
+    currentTags = tags;
+    const n = await getNote(currentId);
+    if (n) { n.tags = tags; await putNote(n); }
+    hideDialog();
+    toast('标签已保存');
+  };
+  dialog.hidden = false;
+  dialogBackdrop.hidden = false;
+  setTimeout(() => input.focus(), 50);
+}
+
 function openListMenu() {
   if (isTrashMode) {
     showSheet('回收站', [
@@ -772,6 +992,8 @@ function openEditorMenu() {
   const pinned = cur && cur.pinned;
   showSheet('笔记', [
     { icon: 'pin', label: pinned ? '取消置顶' : '置顶', action: togglePinCurrent },
+    { icon: 'image', label: '插入本地图片', action: () => fileImage.click() },
+    { icon: 'tag', label: '编辑标签', action: editTags },
     { icon: 'download', label: '导出为 .md', action: exportCurrent },
     { icon: 'file-text', label: '导出为 PDF', action: exportPDF },
     { icon: isDark ? 'sun' : 'moon', label: '切换深色 / 浅色', action: toggleTheme },
@@ -1029,6 +1251,10 @@ function bindEvents() {
     if (fileJson.files[0]) restoreJSON(fileJson.files[0]);
     fileJson.value = '';
   });
+  fileImage.addEventListener('change', () => {
+    if (fileImage.files[0]) insertLocalImage(fileImage.files[0]);
+    fileImage.value = '';
+  });
 
   window.addEventListener('keydown', (e) => {
     if (e.key === 'Escape') { hideSheet(); hideDialog(); }
@@ -1053,6 +1279,7 @@ async function init() {
   await purgeOldTrash();
   await renderList();
   setupQuickbar();
+  setupImmersive();
   registerSW();
 
   // 版本更新检查：打开后、回到前台时、每 30 分钟一次
