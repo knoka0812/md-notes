@@ -79,7 +79,7 @@ const quickbar = $('#quickbar');
 const appNameEl = $('#app-name');
 const appSubEl = $('#app-sub');
 const btnTrashBack = $('#btn-trash-back');
-const APP_VERSION = 'v8';
+const APP_VERSION = 'v9';
 
 /* ---------------- 状态 ---------------- */
 let db = null;
