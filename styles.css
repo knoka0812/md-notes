@@ -719,6 +719,68 @@ mark { background: var(--accent-tint); color: var(--ink); border-radius: 3px; pa
 }
 
 /* =========================================================================
+   手绘风格主题（data-style="sketch"）
+   ========================================================================= */
+[data-style="sketch"] {
+  --font-ui: "Comic Sans MS", "Segoe Print", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", system-ui, sans-serif;
+  --font-content: "Kaiti SC", "STKaiti", "KaiTi", "楷体", "Comic Sans MS", "Segoe Print", cursive, serif;
+  --font-mono: "Comic Sans MS", Menlo, Consolas, monospace;
+  --border: #b9a88f;
+  --shadow-sm: 2px 3px 0 rgba(26, 22, 16, 0.07);
+}
+[data-style="sketch"][data-theme="dark"] {
+  --border: #4a443a;
+  --shadow-sm: 2px 3px 0 rgba(0, 0, 0, 0.3);
+}
+
+/* 卡片、搜索框、面板、按钮：虚线描边 + 不规则圆角 */
+[data-style="sketch"] .note-item,
+[data-style="sketch"] .search-wrap,
+[data-style="sketch"] .fab,
+[data-style="sketch"] .segmented,
+[data-style="sketch"] .sheet,
+[data-style="sketch"] .dialog,
+[data-style="sketch"] .btn {
+  border: 1.5px dashed var(--border);
+}
+[data-style="sketch"] .note-item { border-radius: 18px 12px 20px 10px; }
+[data-style="sketch"] .note-item:nth-child(even) { border-radius: 12px 20px 10px 18px; }
+[data-style="sketch"] .fab { border-radius: 20px 14px 18px 12px; }
+[data-style="sketch"] .dialog { border-radius: 20px 14px 18px 12px; }
+[data-style="sketch"] .segmented { border-radius: 14px 10px 16px 12px; }
+[data-style="sketch"] .btn { border-radius: 14px 10px 16px 12px; }
+[data-style="sketch"] .search-wrap { border-radius: 14px 10px 16px 12px; }
+
+/* 图标/工具按钮：不规则圆角 */
+[data-style="sketch"] .icon-btn { border-radius: 12px 14px 10px 16px; }
+[data-style="sketch"] .tool-btn,
+[data-style="sketch"] .quickbar-btn {
+  border: 1px dashed var(--border);
+  border-radius: 10px 12px 8px 14px;
+}
+
+/* 标题：手写体 + 波浪下划线 */
+[data-style="sketch"] .note-item-title,
+[data-style="sketch"] .markdown-body h1,
+[data-style="sketch"] .markdown-body h2,
+[data-style="sketch"] .markdown-body h3,
+[data-style="sketch"] .markdown-body h4,
+[data-style="sketch"] .markdown-body h5,
+[data-style="sketch"] .markdown-body h6 {
+  font-family: var(--font-content);
+}
+[data-style="sketch"] .markdown-body h1,
+[data-style="sketch"] .markdown-body h2 {
+  text-decoration: underline wavy var(--accent) 2px;
+  text-underline-offset: 6px;
+}
+
+/* 分割线：手绘虚线 */
+[data-style="sketch"] .markdown-body hr {
+  border-top: 2px dashed var(--border);
+}
+
+/* =========================================================================
    打印 / 导出 PDF
    ========================================================================= */
 .print-area { display: none; }

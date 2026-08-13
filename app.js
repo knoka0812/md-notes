@@ -37,7 +37,9 @@ const ICONS = {
   restore: '<path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/>',
   tag: '<path d="M12.586 2.586A2 2 0 0 0 11.172 2H4a2 2 0 0 0-2 2v7.172a2 2 0 0 0 .586 1.414l8.704 8.704a2.426 2.426 0 0 0 3.42 0l6.58-6.58a2.426 2.426 0 0 0 0-3.42z"/><circle cx="7.5" cy="7.5" r=".5" fill="currentColor"/>',
   x: '<path d="M18 6 6 18M6 6l12 12"/>',
-  eye: '<path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/>'
+  eye: '<path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/>',
+  check: '<path d="M20 6 9 17l-5-5"/>',
+  palette: '<path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c.926 0 1.648-.746 1.648-1.688 0-.437-.18-.835-.437-1.125-.29-.289-.438-.652-.438-1.125a1.64 1.64 0 0 1 1.668-1.668h1.996c3.051 0 5.555-2.503 5.555-5.554C21.965 6.012 17.461 2 12 2z"/><circle cx="7.5" cy="11.5" r=".5" fill="currentColor"/><circle cx="10.5" cy="7.5" r=".5" fill="currentColor"/><circle cx="14.5" cy="7.5" r=".5" fill="currentColor"/><circle cx="17.5" cy="10.5" r=".5" fill="currentColor"/>'
 };
 
 function icon(name, size = 20) {
@@ -80,7 +82,7 @@ const quickbar = $('#quickbar');
 const appNameEl = $('#app-name');
 const appSubEl = $('#app-sub');
 const btnTrashBack = $('#btn-trash-back');
-const APP_VERSION = 'v10';
+const APP_VERSION = 'v11';
 
 /* ---------------- 状态 ---------------- */
 let db = null;
@@ -995,6 +997,7 @@ function openListMenu() {
   }
   const items = [
     { icon: 'trash', label: '回收站', action: enterTrash },
+    { icon: 'palette', label: '主题', action: showThemePicker },
     { icon: 'download', label: '导出全部为 .md', action: exportAll },
     { icon: 'database', label: '备份为 JSON', action: backupJSON },
     { icon: 'upload', label: '导入 Markdown (.md)', action: () => fileMd.click() },
@@ -1127,20 +1130,44 @@ function restoreJSON(file) {
 }
 
 /* ---------------- 主题 ---------------- */
-function applyTheme(t) {
+function applyTheme(t, style) {
   document.documentElement.setAttribute('data-theme', t);
+  document.documentElement.setAttribute('data-style', style || '');
   localStorage.setItem('theme', t);
+  localStorage.setItem('style', style || '');
   btnTheme.innerHTML = icon(t === 'dark' ? 'sun' : 'moon', 22);
   const mc = document.querySelector('meta[name="theme-color"]');
   if (mc) mc.setAttribute('content', t === 'dark' ? '#1E1C17' : '#FDFBF7');
 }
 function initTheme() {
   const saved = localStorage.getItem('theme');
+  const style = localStorage.getItem('style') || '';
   const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-  applyTheme(saved || (prefersDark ? 'dark' : 'light'));
+  applyTheme(saved || (prefersDark ? 'dark' : 'light'), style);
 }
 function toggleTheme() {
-  applyTheme(document.documentElement.getAttribute('data-theme') === 'dark' ? 'light' : 'dark');
+  const cur = document.documentElement.getAttribute('data-theme');
+  const style = document.documentElement.getAttribute('data-style') || '';
+  applyTheme(cur === 'dark' ? 'light' : 'dark', style);
+}
+function showThemePicker() {
+  const curTheme = document.documentElement.getAttribute('data-theme') || 'light';
+  const curStyle = document.documentElement.getAttribute('data-style') || '';
+  const opts = [
+    ['light', '', '纸张 · 浅色'],
+    ['dark', '', '纸张 · 深色'],
+    ['light', 'sketch', '手绘 · 浅色'],
+    ['dark', 'sketch', '手绘 · 深色']
+  ];
+  const items = opts.map(([theme, style, label]) => {
+    const selected = (theme === curTheme && style === curStyle);
+    return {
+      icon: selected ? 'check' : '',
+      label: label,
+      action: () => { applyTheme(theme, style); toast('已切换：' + label); }
+    };
+  });
+  showSheet('选择主题', items);
 }
 
 /* ---------------- PWA ---------------- */
