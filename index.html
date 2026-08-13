@@ -1,0 +1,104 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#FDFBF7">
+  <meta name="description" content="纸墨 —— 离线 Markdown 笔记编辑器，可安装到手机主屏幕">
+  <title>纸墨 · 离线笔记</title>
+  <link rel="manifest" href="manifest.json">
+  <link rel="apple-touch-icon" href="icons/icon-192.png">
+  <link rel="icon" type="image/png" href="icons/icon-192.png">
+  <link rel="stylesheet" href="styles.css">
+  <script src="vendor/marked.min.js" defer></script>
+  <script src="vendor/dompurify.min.js" defer></script>
+  <script src="app.js" defer></script>
+</head>
+<body>
+
+  <!-- ===================== 列表页 ===================== -->
+  <main id="list-view" class="view active">
+    <header class="appbar">
+      <div class="appbar-title">
+        <h1 class="app-name">纸墨</h1>
+        <span class="app-sub">离线 Markdown 笔记</span>
+      </div>
+      <div class="appbar-actions">
+        <button id="btn-theme" class="icon-btn" aria-label="切换深色 / 浅色" data-icon="moon"></button>
+        <button id="btn-more" class="icon-btn" aria-label="更多" data-icon="more"></button>
+      </div>
+    </header>
+
+    <div class="search-wrap">
+      <span class="search-icon" data-icon="search"></span>
+      <input id="search" class="search-input" type="search" placeholder="搜索笔记…" autocomplete="off">
+    </div>
+
+    <ul id="note-list" class="note-list" aria-label="笔记列表"></ul>
+
+    <div id="empty-state" class="empty-state" hidden>
+      <div class="empty-ink" data-icon="file-text"></div>
+      <p class="empty-title">还没有笔记</p>
+      <p class="empty-hint">点右下角 <b>＋</b> 开始写第一篇</p>
+    </div>
+
+    <button id="btn-new" class="fab" aria-label="新建笔记" data-icon="plus"></button>
+  </main>
+
+  <!-- ===================== 编辑器页 ===================== -->
+  <main id="editor-view" class="view">
+    <header class="appbar editor-appbar">
+      <button id="btn-back" class="icon-btn" aria-label="返回" data-icon="back"></button>
+      <input id="note-title" class="title-input" type="text" placeholder="无标题" aria-label="标题" autocomplete="off">
+      <button id="btn-editor-more" class="icon-btn" aria-label="笔记操作" data-icon="more"></button>
+    </header>
+
+    <div id="toolbar" class="toolbar" role="toolbar" aria-label="格式工具栏"></div>
+
+    <div class="editor-body">
+      <textarea id="editor" class="editor" placeholder="开始书写…&#10;&#10;支持 Markdown：标题、加粗、列表、代码、引用、链接、表格等。"></textarea>
+      <div id="preview" class="preview markdown-body" hidden></div>
+    </div>
+
+    <footer class="editor-footer">
+      <div class="segmented" role="tablist" aria-label="编辑 / 预览切换">
+        <button id="btn-edit-mode" class="seg" role="tab" aria-selected="true">编辑</button>
+        <button id="btn-preview-mode" class="seg" role="tab" aria-selected="false">预览</button>
+      </div>
+      <div class="meta">
+        <span id="save-state" class="save-state" data-state="saved">已保存</span>
+        <span class="meta-dot">·</span>
+        <span id="word-count">0 字</span>
+      </div>
+    </footer>
+  </main>
+
+  <!-- ===================== 底部操作面板 ===================== -->
+  <div id="sheet-backdrop" class="backdrop" hidden></div>
+  <div id="sheet" class="sheet" role="dialog" aria-modal="true" hidden>
+    <div id="sheet-title" class="sheet-title"></div>
+    <div id="sheet-items" class="sheet-items"></div>
+    <button id="sheet-cancel" class="sheet-cancel">取消</button>
+  </div>
+
+  <!-- ===================== 确认对话框 ===================== -->
+  <div id="dialog-backdrop" class="backdrop" hidden></div>
+  <div id="dialog" class="dialog" role="alertdialog" aria-modal="true" hidden>
+    <p id="dialog-message" class="dialog-message"></p>
+    <div class="dialog-actions">
+      <button id="dialog-cancel" class="btn btn-ghost">取消</button>
+      <button id="dialog-confirm" class="btn btn-danger">删除</button>
+    </div>
+  </div>
+
+  <!-- ===================== Toast ===================== -->
+  <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
+
+  <!-- 隐藏的文件输入 -->
+  <input type="file" id="file-md" accept=".md,.markdown,.txt,text/markdown,text/plain" hidden>
+  <input type="file" id="file-json" accept=".json,application/json" hidden>
+
+  <!-- 打印 / 导出 PDF 专用区域（屏幕隐藏，打印时显示） -->
+  <div id="print-area" class="print-area" aria-hidden="true"></div>
+</body>
+</html>
