@@ -674,6 +674,25 @@ function registerSW() {
     navigator.serviceWorker.register('./sw.js').catch(() => {});
   }
 }
+
+/* ---------------- 版本更新检查 ---------------- */
+let updatePromptShown = false;
+
+async function checkForUpdate() {
+  try {
+    const res = await fetch('./version.json?t=' + Date.now(), { cache: 'no-store' });
+    if (!res.ok) return;
+    const data = await res.json();
+    if (data.version && data.version !== APP_VERSION && !updatePromptShown) {
+      updatePromptShown = true;
+      confirmDialog({
+        message: '发现新版本 ' + data.version + '（当前 ' + APP_VERSION + '）\n\n刷新页面即可更新，无需清理缓存。',
+        confirmLabel: '立即刷新', cancelLabel: '稍后',
+        onConfirm: () => location.reload()
+      });
+    }
+  } catch (e) { /* 离线或网络异常时忽略 */ }
+}
 function isInstalled() {
   return window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
 }
@@ -810,6 +829,13 @@ async function init() {
   db = await openDB();
   await renderList();
   registerSW();
+
+  // 版本更新检查：打开后、回到前台时、每 30 分钟一次
+  setTimeout(checkForUpdate, 3000);
+  setInterval(checkForUpdate, 30 * 60 * 1000);
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') checkForUpdate();
+  });
 }
 
 document.addEventListener('DOMContentLoaded', init);

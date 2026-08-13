@@ -66,4 +66,10 @@ md-notes/
 └── scripts/            开发脚本（生成图标、Playwright 测试）
 ```
 
-测试：`scripts/test-app.py`（功能）+ `scripts/test-offline.py`（离线/PWA），共 29 项断言。
+测试：`scripts/test-app.py`（功能）+ `scripts/test-offline.py`（离线/PWA）+ `scripts/test-detect.py`（浏览器识别）+ `scripts/test-pdf.py`（PDF 导出）+ `scripts/test-update.py`（自动更新）。
+
+## 如何更新版本
+
+1. 改代码后，**同步**把 `app.js` 里的 `APP_VERSION`、`sw.js` 里的 `CACHE`、`version.json` 里的版本号一起 +1（例如 v5 → v6）
+2. `git push` 到 main
+3. 用户下次打开/刷新即可看到新版（网络优先缓存，无需手动清缓存；App 会自动弹「发现新版本」提示）
