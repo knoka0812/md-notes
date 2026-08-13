@@ -69,7 +69,7 @@ const toastEl = $('#toast');
 const fileMd = $('#file-md');
 const fileJson = $('#file-json');
 const printArea = $('#print-area');
-const APP_VERSION = 'v4';
+const APP_VERSION = 'v5';
 
 /* ---------------- 状态 ---------------- */
 let db = null;
@@ -78,11 +78,9 @@ let currentId = null;
 let currentCreatedAt = null;
 let saveTimer = null;
 let isPreview = false;
-let deferredPrompt = null;
 
-/* 提前注册安装事件（beforeinstallprompt 可能早于 DOMContentLoaded 触发） */
-window.addEventListener('beforeinstallprompt', (e) => { e.preventDefault(); deferredPrompt = e; });
-window.addEventListener('appinstalled', () => { deferredPrompt = null; toast('已安装到主屏幕 ✓'); });
+/* 安装完成提示（通过浏览器菜单安装后触发） */
+window.addEventListener('appinstalled', () => { toast('已安装到主屏幕 ✓'); });
 
 /* ---------------- IndexedDB ---------------- */
 function openDB() {
@@ -676,16 +674,16 @@ function registerSW() {
     navigator.serviceWorker.register('./sw.js').catch(() => {});
   }
 }
-async function installApp() {
-  if (deferredPrompt) {
-    try {
-      deferredPrompt.prompt();
-      await deferredPrompt.userChoice;
-    } catch (e) { /* 用户取消或浏览器不支持时忽略 */ }
-    deferredPrompt = null;
-  } else {
-    showInstallGuide();
+function isInstalled() {
+  return window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
+}
+
+function installApp() {
+  if (isInstalled()) {
+    toast('已经安装到主屏幕 ✓');
+    return;
   }
+  showInstallGuide();
 }
 
 /* 浏览器识别：根据 UA 判断，给出各自的安装/收藏步骤 */
