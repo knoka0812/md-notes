@@ -79,6 +79,10 @@ let saveTimer = null;
 let isPreview = false;
 let deferredPrompt = null;
 
+/* 提前注册安装事件（beforeinstallprompt 可能早于 DOMContentLoaded 触发） */
+window.addEventListener('beforeinstallprompt', (e) => { e.preventDefault(); deferredPrompt = e; });
+window.addEventListener('appinstalled', () => { deferredPrompt = null; toast('已安装到主屏幕 ✓'); });
+
 /* ---------------- IndexedDB ---------------- */
 function openDB() {
   return new Promise((resolve, reject) => {
@@ -539,7 +543,7 @@ function openListMenu() {
     { icon: 'upload', label: '导入 Markdown (.md)', action: () => fileMd.click() },
     { icon: 'database', label: '导入备份 (JSON)', action: () => fileJson.click() }
   ];
-  if (deferredPrompt) items.push({ icon: 'download', label: '安装到主屏幕', action: installApp });
+  items.push({ icon: 'download', label: '安装到主屏幕', action: installApp });
   items.push({ icon: 'info', label: '关于', action: showAbout });
   showSheet('更多', items);
 }
@@ -673,12 +677,22 @@ function registerSW() {
 }
 async function installApp() {
   if (deferredPrompt) {
-    deferredPrompt.prompt();
-    await deferredPrompt.userChoice;
+    try {
+      deferredPrompt.prompt();
+      await deferredPrompt.userChoice;
+    } catch (e) { /* 用户取消或浏览器不支持时忽略 */ }
     deferredPrompt = null;
   } else {
-    toast('请在浏览器菜单中选择「安装应用 / 添加到主屏幕」');
+    showInstallGuide();
   }
+}
+
+function showInstallGuide() {
+  confirmDialog({
+    message: '安装到主屏幕（两步）\n\n1. 点 Chrome 右上角「⋮」菜单\n2. 选「安装应用」或「添加到主屏幕」\n\n提示：如果菜单里暂时没有这项，说明页面还没加载完，稍等几秒再点右上角菜单看看。',
+    confirmLabel: '知道了', cancelLabel: '', danger: false,
+    onConfirm: () => {}
+  });
 }
 
 /* ---------------- 关于 ---------------- */
@@ -718,7 +732,6 @@ function bindEvents() {
     fileJson.value = '';
   });
 
-  window.addEventListener('beforeinstallprompt', (e) => { e.preventDefault(); deferredPrompt = e; });
   window.addEventListener('keydown', (e) => {
     if (e.key === 'Escape') { hideSheet(); hideDialog(); }
   });
