@@ -69,6 +69,7 @@ const toastEl = $('#toast');
 const fileMd = $('#file-md');
 const fileJson = $('#file-json');
 const printArea = $('#print-area');
+const APP_VERSION = 'v4';
 
 /* ---------------- 状态 ---------------- */
 let db = null;
@@ -805,6 +806,8 @@ async function init() {
   injectIcons();
   renderToolbar();
   initTheme();
+  const verEl = $('#app-version');
+  if (verEl) verEl.textContent = APP_VERSION;
   bindEvents();
   db = await openDB();
   await renderList();

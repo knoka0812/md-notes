@@ -120,6 +120,7 @@ svg { display: block; flex: none; }
   letter-spacing: 0.02em;
 }
 .app-sub { display: block; font-size: 12px; color: var(--ink-faint); margin-top: -2px; }
+.app-version { font-size: 11px; color: var(--ink-faint); opacity: .75; margin-left: 2px; }
 .appbar-actions { display: flex; gap: var(--sp-1); }
 
 /* 搜索框 */

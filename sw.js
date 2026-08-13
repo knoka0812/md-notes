@@ -1,8 +1,10 @@
 'use strict';
 
-/* 纸墨 · 离线笔记 —— Service Worker（缓存优先，离线可用） */
+/* 纸墨 · 离线笔记 —— Service Worker
+   策略：网络优先、断网回退缓存
+   （联网时始终取最新代码，避免更新后一直显示旧版；断网时才用缓存，保留离线能力） */
 
-const CACHE = 'zhimo-notes-v3';
+const CACHE = 'zhimo-notes-v4';
 const ASSETS = [
   './',
   './index.html',
@@ -35,17 +37,14 @@ self.addEventListener('activate', (e) => {
 self.addEventListener('fetch', (e) => {
   if (e.request.method !== 'GET') return;
   e.respondWith(
-    caches.match(e.request).then((cached) => {
-      const network = fetch(e.request)
-        .then((res) => {
-          if (res && res.status === 200 && res.type === 'basic') {
-            const clone = res.clone();
-            caches.open(CACHE).then((c) => c.put(e.request, clone));
-          }
-          return res;
-        })
-        .catch(() => cached);
-      return cached || network;
-    })
+    fetch(e.request)
+      .then((res) => {
+        if (res && res.status === 200 && res.type === 'basic') {
+          const clone = res.clone();
+          caches.open(CACHE).then((c) => c.put(e.request, clone));
+        }
+        return res;
+      })
+      .catch(() => caches.match(e.request))
   );
 });
