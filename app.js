@@ -687,9 +687,66 @@ async function installApp() {
   }
 }
 
+/* 浏览器识别：根据 UA 判断，给出各自的安装/收藏步骤 */
+function detectBrowser() {
+  const ua = navigator.userAgent;
+  const isIOS = /iPhone|iPad|iPod/.test(ua);
+
+  if (isIOS) {
+    if (/MicroMessenger/.test(ua)) return 'wechat-ios';
+    if (/CriOS/.test(ua)) return 'ios-chrome';
+    if (/FxiOS/.test(ua)) return 'ios-firefox';
+    if (/EdgiOS/.test(ua)) return 'ios-edge';
+    return 'ios-safari';
+  }
+
+  if (/MicroMessenger/.test(ua)) return 'wechat';
+  if (/EdgA?\//.test(ua)) return 'edge';
+  if (/SamsungBrowser/.test(ua)) return 'samsung';
+  if (/HuaweiBrowser|HwBrowser|ArkWeb|HUAWEI/.test(ua)) return 'huawei';
+  if (/MiuiBrowser|XiaoMi|Miui/.test(ua)) return 'xiaomi';
+  if (/MQQBrowser|QQBrowser/.test(ua)) return 'qq';
+  if (/UCBrowser|UCWEB/.test(ua)) return 'uc';
+  if (/baiduboxapp|Baidu/.test(ua)) return 'baidu';
+  if (/VivoBrowser/.test(ua)) return 'vivo';
+  if (/HeyTapBrowser|OppoBrowser/.test(ua)) return 'oppo';
+  if (/OPR\/|Opera/.test(ua)) return 'opera';
+  if (/Firefox\//.test(ua)) return 'firefox';
+  if (/Chrome\//.test(ua)) return 'chrome';
+  return 'other';
+}
+
+const INSTALL_GUIDES = {
+  'chrome':       { name: 'Chrome', full: true,  steps: ['点右上角「⋮」菜单', '选「安装应用」或「添加到主屏幕」'] },
+  'edge':         { name: 'Edge', full: true,    steps: ['点右上角「⋯」菜单', '选「安装应用」或「添加到手机」'] },
+  'samsung':      { name: '三星浏览器', full: true, steps: ['点右下角「≡」菜单', '选「添加页面到」→「主屏幕」'] },
+  'ios-safari':   { name: 'Safari（iPhone）', full: true, steps: ['点底部「分享」按钮（方框 ↑）', '选「添加到主屏幕」', '点右上角「添加」'] },
+  'ios-chrome':   { name: 'Chrome（iPhone）', full: true, steps: ['点右上角「⋯」菜单', '选「添加到主屏幕」'] },
+  'ios-edge':     { name: 'Edge（iPhone）', full: true, steps: ['点底部「⋯」菜单', '选「添加到主屏幕」'] },
+  'ios-firefox':  { name: 'Firefox（iPhone）', full: true, steps: ['点右上角「⋯」菜单', '选「添加到主屏幕」'] },
+  'huawei':       { name: '华为浏览器', full: false, steps: ['点右上角「⋮」或「···」菜单', '选「添加到主屏幕 / 添加到桌面」'] },
+  'xiaomi':       { name: '小米浏览器', full: false, steps: ['点右上角「···」菜单', '选「添加到主屏幕」'] },
+  'qq':           { name: 'QQ 浏览器', full: false, steps: ['点底部菜单（或右上角「···」）', '选「添加到主屏幕」'] },
+  'uc':           { name: 'UC 浏览器', full: false, steps: ['点底部中间「菜单」', '选「添加到主屏幕」'] },
+  'baidu':        { name: '百度浏览器', full: false, steps: ['点浏览器菜单', '选「添加到主屏幕 / 添加收藏」'] },
+  'vivo':         { name: 'vivo 浏览器', full: false, steps: ['点浏览器菜单', '选「添加到主屏幕」'] },
+  'oppo':         { name: 'OPPO 浏览器', full: false, steps: ['点浏览器菜单', '选「添加到主屏幕」'] },
+  'opera':        { name: 'Opera', full: false, steps: ['点浏览器菜单', '选「添加到主屏幕」'] },
+  'firefox':      { name: 'Firefox', full: false, steps: ['Firefox 安卓版不支持「添加到主屏幕」', '建议改用 Chrome / Edge / 系统自带浏览器打开'] },
+  'wechat':       { name: '微信', full: false, steps: ['微信内置浏览器不支持安装', '点右上角「···」→「在浏览器打开」', '再用浏览器菜单安装'] },
+  'wechat-ios':   { name: '微信', full: false, steps: ['微信内置浏览器不支持安装', '点右上角「···」→「在 Safari 打开」', '再点底部「分享」→「添加到主屏幕」'] },
+  'other':        { name: '当前浏览器', full: false, steps: ['在浏览器菜单里找「添加到主屏幕 / 添加到桌面」', '找不到的话直接收藏 / 加书签即可，功能不受影响'] }
+};
+
 function showInstallGuide() {
+  const id = detectBrowser();
+  const g = INSTALL_GUIDES[id] || INSTALL_GUIDES.other;
+  const steps = g.steps.map((s, i) => (i + 1) + '. ' + s).join('\n');
+  const note = g.full
+    ? '安装后：主屏幕有独立图标、全屏打开，断网也能用。'
+    : '提示：该浏览器可能不支持完全离线，但联网使用一切正常；建议改用 Chrome / Edge / 系统浏览器打开，安装体验最佳。';
   confirmDialog({
-    message: '安装到主屏幕（两步）\n\n1. 点 Chrome 右上角「⋮」菜单\n2. 选「安装应用」或「添加到主屏幕」\n\n提示：如果菜单里暂时没有这项，说明页面还没加载完，稍等几秒再点右上角菜单看看。',
+    message: '安装到主屏幕（已识别：' + g.name + '）\n\n' + steps + '\n\n' + note,
     confirmLabel: '知道了', cancelLabel: '', danger: false,
     onConfirm: () => {}
   });

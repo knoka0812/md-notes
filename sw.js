@@ -2,7 +2,7 @@
 
 /* 纸墨 · 离线笔记 —— Service Worker（缓存优先，离线可用） */
 
-const CACHE = 'zhimo-notes-v2';
+const CACHE = 'zhimo-notes-v3';
 const ASSETS = [
   './',
   './index.html',
