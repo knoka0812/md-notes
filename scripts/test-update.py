@@ -23,7 +23,7 @@ with sync_playwright() as p:
     try:
         page.wait_for_selector("#dialog:not([hidden])", timeout=7000)
         txt = page.locator("#dialog-message").inner_text()
-        check("弹出更新提示", "v99" in txt and "v5" in txt, txt.replace("\n", " / ")[:60])
+        check("弹出更新提示", "v99" in txt and "当前" in txt, txt.replace("\n", " / ")[:60])
         check("含刷新按钮", "立即刷新" in page.locator("#dialog-confirm").inner_text())
     except Exception as e:
         check("弹出更新提示", False, str(e)[:60])

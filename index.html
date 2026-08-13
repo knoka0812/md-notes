@@ -20,8 +20,11 @@
   <main id="list-view" class="view active">
     <header class="appbar">
       <div class="appbar-title">
-        <h1 class="app-name">纸墨</h1>
-        <span class="app-sub">离线 Markdown 笔记 <span id="app-version" class="app-version"></span></span>
+        <button id="btn-trash-back" class="icon-btn appbar-back" aria-label="返回笔记" data-icon="back" hidden></button>
+        <div>
+          <h1 id="app-name" class="app-name">纸墨</h1>
+          <span id="app-sub" class="app-sub">离线 Markdown 笔记 <span id="app-version" class="app-version"></span></span>
+        </div>
       </div>
       <div class="appbar-actions">
         <button id="btn-theme" class="icon-btn" aria-label="切换深色 / 浅色" data-icon="moon"></button>
@@ -72,6 +75,9 @@
       </div>
     </footer>
   </main>
+
+  <!-- ===================== 键盘上方快捷符号栏 ===================== -->
+  <div id="quickbar" class="quickbar" role="toolbar" aria-label="Markdown 快捷符号"></div>
 
   <!-- ===================== 底部操作面板 ===================== -->
   <div id="sheet-backdrop" class="backdrop" hidden></div>

@@ -32,7 +32,9 @@ const ICONS = {
   link: '<path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>',
   minus: '<path d="M5 12h14"/>',
   image: '<rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/>',
-  table: '<path d="M12 3v18"/><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18"/><path d="M3 15h18"/>'
+  table: '<path d="M12 3v18"/><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18"/><path d="M3 15h18"/>',
+  pin: '<path d="M12 17v5"/><path d="M9 10.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24V16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V7a1 1 0 0 1 1-1 2 2 0 0 0 0-4H8a2 2 0 0 0 0 4 1 1 0 0 1 1 1z"/>',
+  restore: '<path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/>'
 };
 
 function icon(name, size = 20) {
@@ -69,7 +71,11 @@ const toastEl = $('#toast');
 const fileMd = $('#file-md');
 const fileJson = $('#file-json');
 const printArea = $('#print-area');
-const APP_VERSION = 'v5';
+const quickbar = $('#quickbar');
+const appNameEl = $('#app-name');
+const appSubEl = $('#app-sub');
+const btnTrashBack = $('#btn-trash-back');
+const APP_VERSION = 'v6';
 
 /* ---------------- 状态 ---------------- */
 let db = null;
@@ -78,6 +84,9 @@ let currentId = null;
 let currentCreatedAt = null;
 let saveTimer = null;
 let isPreview = false;
+let isTrashMode = false;
+let currentPinned = false;
+const isTouch = window.matchMedia('(pointer: coarse)').matches;
 
 /* 安装完成提示（通过浏览器菜单安装后触发） */
 window.addEventListener('appinstalled', () => { toast('已安装到主屏幕 ✓'); });
@@ -133,6 +142,46 @@ function clearAllNotes() {
   });
 }
 
+/* 活跃笔记：未删除，置顶优先、再按更新时间倒序 */
+async function getActiveNotes() {
+  const all = await getAllNotes();
+  return all
+    .filter((n) => !n.deletedAt)
+    .sort((a, b) => (b.pinned ? 1 : 0) - (a.pinned ? 1 : 0) || b.updatedAt - a.updatedAt);
+}
+/* 回收站：已删除，按删除时间倒序 */
+async function getTrashedNotes() {
+  const all = await getAllNotes();
+  return all.filter((n) => n.deletedAt).sort((a, b) => b.deletedAt - a.deletedAt);
+}
+/* 软删除（移入回收站） */
+async function softDelete(id) {
+  const n = await getNote(id);
+  if (n) { n.deletedAt = Date.now(); await putNote(n); }
+}
+/* 从回收站恢复 */
+async function restoreNote(id) {
+  const n = await getNote(id);
+  if (n) { n.deletedAt = null; n.updatedAt = Date.now(); await putNote(n); }
+}
+/* 清空回收站（彻底删除） */
+async function emptyTrash() {
+  const all = await getAllNotes();
+  const tx = db.transaction('notes', 'readwrite');
+  const store = tx.objectStore('notes');
+  all.filter((n) => n.deletedAt).forEach((n) => store.delete(n.id));
+  return new Promise((res, rej) => { tx.oncomplete = res; tx.onerror = () => rej(tx.error); });
+}
+/* 自动清理：删除超过 30 天的笔记彻底清除 */
+async function purgeOldTrash() {
+  const all = await getAllNotes();
+  const cutoff = Date.now() - 30 * 24 * 60 * 60 * 1000;
+  const tx = db.transaction('notes', 'readwrite');
+  const store = tx.objectStore('notes');
+  all.filter((n) => n.deletedAt && n.deletedAt < cutoff).forEach((n) => store.delete(n.id));
+  return new Promise((res, rej) => { tx.oncomplete = res; tx.onerror = () => rej(tx.error); });
+}
+
 /* ---------------- 工具 ---------------- */
 function uid() {
   return Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
@@ -177,6 +226,21 @@ function snippet(md, len = 120) {
     .trim();
   return s.length > len ? s.slice(0, len) + '…' : s;
 }
+/* 搜索关键词高亮（先转义，再大小写不敏感地包 <mark>） */
+function highlightText(text, q) {
+  const escaped = escapeHTML(String(text || ''));
+  if (!q) return escaped;
+  const eq = escapeHTML(q);
+  if (!eq) return escaped;
+  const lower = escaped.toLowerCase();
+  const lq = eq.toLowerCase();
+  let out = '', i = 0, idx;
+  while ((idx = lower.indexOf(lq, i)) !== -1) {
+    out += escaped.slice(i, idx) + '<mark>' + escaped.slice(idx, idx + eq.length) + '</mark>';
+    i = idx + eq.length;
+  }
+  return out + escaped.slice(i);
+}
 function download(filename, text, mime = 'text/markdown;charset=utf-8') {
   const blob = new Blob([text], { type: mime });
   const url = URL.createObjectURL(blob);
@@ -205,7 +269,7 @@ function renderMarkdown(md) {
 
 /* ---------------- 列表页 ---------------- */
 async function renderList() {
-  notes = await getAllNotes();
+  notes = isTrashMode ? await getTrashedNotes() : await getActiveNotes();
   const f = searchInput.value.trim().toLowerCase();
   const filtered = f ? notes.filter((n) => (n.title + ' ' + n.content).toLowerCase().includes(f)) : notes;
 
@@ -213,8 +277,10 @@ async function renderList() {
 
   if (notes.length === 0) {
     emptyState.hidden = false;
-    emptyState.querySelector('.empty-title').textContent = '还没有笔记';
-    emptyState.querySelector('.empty-hint').innerHTML = '点右下角 <b>＋</b> 开始写第一篇';
+    emptyState.querySelector('.empty-title').textContent = isTrashMode ? '回收站是空的' : '还没有笔记';
+    emptyState.querySelector('.empty-hint').innerHTML = isTrashMode
+      ? '删除的笔记会在这里保留 30 天'
+      : '点右下角 <b>＋</b> 开始写第一篇';
     return;
   }
   if (filtered.length === 0) {
@@ -225,45 +291,96 @@ async function renderList() {
   }
   emptyState.hidden = true;
 
-  filtered.forEach((n) => noteList.appendChild(buildItem(n)));
+  filtered.forEach((n) => noteList.appendChild(buildItem(n, f)));
 }
 
-function buildItem(n) {
+function buildItem(n, query) {
   const li = document.createElement('li');
+  const title = n.title || '';
+  const snip = snippet(n.content);
 
   const main = document.createElement('button');
   main.type = 'button';
   main.className = 'note-item';
-  const title = n.title || '';
-  const snip = snippet(n.content);
-  main.innerHTML = `
-    <p class="note-item-title ${title ? '' : 'is-untitled'}">${escapeHTML(title || '无标题')}</p>
-    <p class="note-item-snippet">${escapeHTML(snip) || '&nbsp;'}</p>
-    <div class="note-item-meta"><span>${relativeTime(n.updatedAt)}</span><span>${countWords(n.content)} 字</span></div>`;
-  main.addEventListener('click', () => openNote(n.id));
+
+  if (isTrashMode) {
+    main.innerHTML = `
+      <p class="note-item-title ${title ? '' : 'is-untitled'}">${highlightText(title || '无标题', query)}</p>
+      <p class="note-item-snippet">${highlightText(snip, query) || '&nbsp;'}</p>
+      <div class="note-item-meta"><span>删除于 ${relativeTime(n.deletedAt)}</span><span>${countWords(n.content)} 字</span></div>`;
+    main.addEventListener('click', async () => {
+      await restoreNote(n.id);
+      toast('已恢复');
+      await renderList();
+    });
+  } else {
+    const pin = n.pinned ? '<span class="note-item-pin">' + icon('pin', 15) + '</span>' : '';
+    main.innerHTML = `
+      <p class="note-item-title ${title ? '' : 'is-untitled'}">${pin}${highlightText(title || '无标题', query)}</p>
+      <p class="note-item-snippet">${highlightText(snip, query) || '&nbsp;'}</p>
+      <div class="note-item-meta"><span>${relativeTime(n.updatedAt)}</span><span>${countWords(n.content)} 字</span></div>`;
+    main.addEventListener('click', () => openNote(n.id));
+  }
 
   const del = document.createElement('button');
   del.type = 'button';
   del.className = 'note-item-del icon-btn';
-  del.setAttribute('aria-label', '删除');
   del.innerHTML = icon('trash', 18);
-  del.addEventListener('click', (e) => {
-    e.stopPropagation();
-    confirmDialog({
-      message: `删除「${n.title || '无标题'}」？此操作不可撤销。`,
-      confirmLabel: '删除', danger: true,
-      onConfirm: async () => {
-        await deleteNote(n.id);
-        if (currentId === n.id) { currentId = null; clearTimeout(saveTimer); }
-        toast('已删除');
-        await renderList();
-      }
+
+  if (isTrashMode) {
+    del.setAttribute('aria-label', '彻底删除');
+    del.addEventListener('click', (e) => {
+      e.stopPropagation();
+      confirmDialog({
+        message: `彻底删除「${n.title || '无标题'}」？此操作不可恢复。`,
+        confirmLabel: '彻底删除', danger: true,
+        onConfirm: async () => {
+          await deleteNote(n.id);
+          toast('已彻底删除');
+          await renderList();
+        }
+      });
     });
-  });
+  } else {
+    del.setAttribute('aria-label', '删除');
+    del.addEventListener('click', (e) => {
+      e.stopPropagation();
+      confirmDialog({
+        message: `删除「${n.title || '无标题'}」？将移入回收站，30 天内可恢复。`,
+        confirmLabel: '删除', danger: true,
+        onConfirm: async () => {
+          await softDelete(n.id);
+          if (currentId === n.id) { currentId = null; clearTimeout(saveTimer); }
+          toast('已移入回收站');
+          await renderList();
+        }
+      });
+    });
+  }
 
   li.appendChild(main);
   li.appendChild(del);
   return li;
+}
+
+/* 进入 / 退出回收站 */
+function enterTrash() {
+  isTrashMode = true;
+  btnTrashBack.hidden = false;
+  appNameEl.textContent = '回收站';
+  appSubEl.innerHTML = '删除的笔记保留 30 天 <span class="app-version">' + APP_VERSION + '</span>';
+  $('#btn-new').style.display = 'none';
+  searchInput.value = '';
+  renderList();
+}
+function exitTrash() {
+  isTrashMode = false;
+  btnTrashBack.hidden = true;
+  appNameEl.textContent = '纸墨';
+  appSubEl.innerHTML = '离线 Markdown 笔记 <span class="app-version">' + APP_VERSION + '</span>';
+  $('#btn-new').style.display = '';
+  searchInput.value = '';
+  renderList();
 }
 
 /* ---------------- 编辑器 ---------------- */
@@ -272,6 +389,7 @@ async function openNote(id) {
   if (!note) return;
   currentId = note.id;
   currentCreatedAt = note.createdAt;
+  currentPinned = note.pinned || false;
   titleInput.value = note.title || '';
   editor.value = note.content || '';
   setMode('edit');
@@ -297,7 +415,8 @@ async function saveNow() {
     title: titleInput.value.trim(),
     content: editor.value,
     createdAt: currentCreatedAt || Date.now(),
-    updatedAt: Date.now()
+    updatedAt: Date.now(),
+    pinned: currentPinned
   };
   await putNote(note);
   const idx = notes.findIndex((n) => n.id === currentId);
@@ -339,11 +458,11 @@ function confirmDeleteCurrent() {
   const id = currentId;
   if (!id) return;
   confirmDialog({
-    message: '删除这篇笔记？此操作不可撤销。',
+    message: '删除这篇笔记？将移入回收站，30 天内可恢复。',
     confirmLabel: '删除', danger: true,
     onConfirm: async () => {
-      await deleteNote(id);
-      toast('已删除');
+      await softDelete(id);
+      toast('已移入回收站');
       await exitToNotes();
     }
   });
@@ -500,6 +619,72 @@ function expandToLines(s) {
   return { start, end };
 }
 
+/* ---------------- 键盘上方快捷符号栏 ---------------- */
+const QUICKBAR = [
+  { label: '#', insert: '# ', cursor: 2 },
+  { label: '##', insert: '## ', cursor: 3 },
+  { label: '**', insert: '****', cursor: 2 },
+  { label: '`', insert: '``', cursor: 1 },
+  { label: '[]()', insert: '[]()', cursor: 1 },
+  { label: '![]()', insert: '![]()', cursor: 2 },
+  { label: '-', insert: '- ', cursor: 2 },
+  { label: '[ ]', insert: '- [ ] ', cursor: 6 },
+  { label: '>', insert: '> ', cursor: 2 },
+  { label: '|', insert: '| ', cursor: 2 },
+  { label: '---', insert: '\n---\n', cursor: 5 },
+  { label: '~~', insert: '~~~~', cursor: 2 }
+];
+
+function renderQuickbar() {
+  quickbar.innerHTML = '';
+  QUICKBAR.forEach((item) => {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'quickbar-btn';
+    b.textContent = item.label;
+    b.setAttribute('aria-label', '插入 ' + item.label);
+    b.addEventListener('pointerdown', (e) => {
+      e.preventDefault(); // 保持输入框焦点
+      insertQuick(item);
+    });
+    quickbar.appendChild(b);
+  });
+}
+
+function insertQuick(item) {
+  const s = getSel();
+  replaceSelection(item.insert, s.start, s.end);
+  const pos = s.start + (item.cursor != null ? item.cursor : item.insert.length);
+  editor.setSelectionRange(pos, pos);
+}
+
+function keyboardHeight() {
+  if (!window.visualViewport) return 0;
+  return window.innerHeight - window.visualViewport.height - window.visualViewport.offsetTop;
+}
+function showQuickbar() { quickbar.classList.add('show'); updateQuickbarPos(); }
+function hideQuickbar() { quickbar.classList.remove('show'); }
+function updateQuickbarPos() {
+  const kb = keyboardHeight();
+  quickbar.style.bottom = (kb > 80 ? kb : 0) + 'px';
+}
+function refreshQuickbar() {
+  // 只在输入框聚焦且键盘打开时显示
+  if (document.activeElement === editor && !isPreview && keyboardHeight() > 80) showQuickbar();
+  else hideQuickbar();
+}
+function setupQuickbar() {
+  if (!isTouch) return;
+  renderQuickbar();
+  editor.addEventListener('focus', refreshQuickbar);
+  editor.addEventListener('blur', hideQuickbar);
+  titleInput.addEventListener('focus', hideQuickbar);
+  if (window.visualViewport) {
+    window.visualViewport.addEventListener('resize', refreshQuickbar);
+    window.visualViewport.addEventListener('scroll', refreshQuickbar);
+  }
+}
+
 /* ---------------- 底部面板 / 对话框 ---------------- */
 function showSheet(title, items) {
   sheetTitle.textContent = title;
@@ -535,21 +720,58 @@ function hideDialog() {
   dialogBackdrop.hidden = true;
 }
 
+function confirmEmptyTrash() {
+  const count = notes.length;
+  if (!count) { toast('回收站已经是空的'); return; }
+  confirmDialog({
+    message: `彻底删除回收站里的 ${count} 篇笔记？此操作不可恢复。`,
+    confirmLabel: '清空', danger: true,
+    onConfirm: async () => {
+      await emptyTrash();
+      toast('回收站已清空');
+      await renderList();
+    }
+  });
+}
+
+async function togglePinCurrent() {
+  if (!currentId) return;
+  const n = await getNote(currentId);
+  if (!n) return;
+  n.pinned = !n.pinned;
+  currentPinned = n.pinned;
+  await putNote(n);
+  const idx = notes.findIndex((x) => x.id === currentId);
+  if (idx >= 0) notes[idx] = n;
+  toast(n.pinned ? '已置顶' : '已取消置顶');
+}
+
 function openListMenu() {
+  if (isTrashMode) {
+    showSheet('回收站', [
+      { icon: 'trash', label: '清空回收站', danger: true, action: confirmEmptyTrash },
+      { icon: 'info', label: '关于', action: showAbout }
+    ]);
+    return;
+  }
   const items = [
+    { icon: 'trash', label: '回收站', action: enterTrash },
     { icon: 'download', label: '导出全部为 .md', action: exportAll },
     { icon: 'database', label: '备份为 JSON', action: backupJSON },
     { icon: 'upload', label: '导入 Markdown (.md)', action: () => fileMd.click() },
-    { icon: 'database', label: '导入备份 (JSON)', action: () => fileJson.click() }
+    { icon: 'database', label: '导入备份 (JSON)', action: () => fileJson.click() },
+    { icon: 'download', label: '安装到主屏幕', action: installApp },
+    { icon: 'info', label: '关于', action: showAbout }
   ];
-  items.push({ icon: 'download', label: '安装到主屏幕', action: installApp });
-  items.push({ icon: 'info', label: '关于', action: showAbout });
   showSheet('更多', items);
 }
 
 function openEditorMenu() {
   const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
+  const cur = notes.find((x) => x.id === currentId);
+  const pinned = cur && cur.pinned;
   showSheet('笔记', [
+    { icon: 'pin', label: pinned ? '取消置顶' : '置顶', action: togglePinCurrent },
     { icon: 'download', label: '导出为 .md', action: exportCurrent },
     { icon: 'file-text', label: '导出为 PDF', action: exportPDF },
     { icon: isDark ? 'sun' : 'moon', label: '切换深色 / 浅色', action: toggleTheme },
@@ -786,6 +1008,7 @@ function bindEvents() {
   $('#btn-more').addEventListener('click', openListMenu);
   $('#btn-editor-more').addEventListener('click', openEditorMenu);
   $('#btn-back').addEventListener('click', closeEditor);
+  btnTrashBack.addEventListener('click', exitTrash);
   btnEditMode.addEventListener('click', () => setMode('edit'));
   btnPreviewMode.addEventListener('click', () => setMode('preview'));
   sheetCancel.addEventListener('click', hideSheet);
@@ -827,7 +1050,9 @@ async function init() {
   if (verEl) verEl.textContent = APP_VERSION;
   bindEvents();
   db = await openDB();
+  await purgeOldTrash();
   await renderList();
+  setupQuickbar();
   registerSW();
 
   // 版本更新检查：打开后、回到前台时、每 30 分钟一次
