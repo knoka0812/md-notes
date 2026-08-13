@@ -79,7 +79,7 @@ const quickbar = $('#quickbar');
 const appNameEl = $('#app-name');
 const appSubEl = $('#app-sub');
 const btnTrashBack = $('#btn-trash-back');
-const APP_VERSION = 'v7';
+const APP_VERSION = 'v8';
 
 /* ---------------- 状态 ---------------- */
 let db = null;
@@ -100,10 +100,16 @@ window.addEventListener('appinstalled', () => { toast('已安装到主屏幕 ✓
 /* ---------------- IndexedDB ---------------- */
 function openDB() {
   return new Promise((resolve, reject) => {
-    const req = indexedDB.open('zhimo-notes', 1);
+    const req = indexedDB.open('zhimo-notes', 2);
     req.onupgradeneeded = () => {
-      const store = req.result.createObjectStore('notes', { keyPath: 'id' });
-      store.createIndex('updatedAt', 'updatedAt');
+      const dbx = req.result;
+      if (!dbx.objectStoreNames.contains('notes')) {
+        const store = dbx.createObjectStore('notes', { keyPath: 'id' });
+        store.createIndex('updatedAt', 'updatedAt');
+      }
+      if (!dbx.objectStoreNames.contains('images')) {
+        dbx.createObjectStore('images', { keyPath: 'id' });
+      }
     };
     req.onsuccess = () => resolve(req.result);
     req.onerror = () => reject(req.error);
@@ -188,6 +194,36 @@ async function purgeOldTrash() {
   return new Promise((res, rej) => { tx.oncomplete = res; tx.onerror = () => rej(tx.error); });
 }
 
+/* ---------------- 图片存储（正文只存 zhimo://id 短标记，图片单独存） ---------------- */
+const imageCache = {};
+function putImage(id, dataUrl) {
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction('images', 'readwrite');
+    tx.objectStore('images').put({ id, dataUrl });
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+  });
+}
+function getAllImages() {
+  return new Promise((resolve, reject) => {
+    const req = db.transaction('images', 'readonly').objectStore('images').getAll();
+    req.onsuccess = () => resolve(req.result || []);
+    req.onerror = () => reject(req.error);
+  });
+}
+function clearAllImages() {
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction('images', 'readwrite');
+    tx.objectStore('images').clear();
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+  });
+}
+async function loadImageCache() {
+  const imgs = await getAllImages();
+  imgs.forEach((img) => { imageCache[img.id] = img.dataUrl; });
+}
+
 /* ---------------- 工具 ---------------- */
 function uid() {
   return Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
@@ -270,7 +306,13 @@ function toast(msg) {
 /* ---------------- Markdown 渲染 ---------------- */
 marked.setOptions({ gfm: true, breaks: true });
 function renderMarkdown(md) {
-  return DOMPurify.sanitize(marked.parse(md || ''));
+  let html = marked.parse(md || '');
+  html = html.replace(/src="zhimo:\/\/([A-Za-z0-9]+)"/g, (m, id) => imageCache[id] ? 'src="' + imageCache[id] + '"' : '');
+  return DOMPurify.sanitize(html);
+}
+/* 导出时把图片短标记还原为内嵌 base64，保证 .md 可移植 */
+function resolveImagesInText(text) {
+  return String(text || '').replace(/zhimo:\/\/([A-Za-z0-9]+)/g, (m, id) => imageCache[id] || m);
 }
 
 /* ---------------- 列表页 ---------------- */
@@ -617,6 +659,7 @@ function setMode(mode) {
     editor.hidden = true;
     preview.hidden = false;
     toolbar.style.display = 'none';
+    quickbar.hidden = true;
     editorView.classList.remove('immersive');
     btnEditMode.setAttribute('aria-selected', 'false');
     btnPreviewMode.setAttribute('aria-selected', 'true');
@@ -625,6 +668,7 @@ function setMode(mode) {
     editor.hidden = false;
     preview.hidden = true;
     toolbar.style.display = '';
+    quickbar.hidden = false;
     btnEditMode.setAttribute('aria-selected', 'true');
     btnPreviewMode.setAttribute('aria-selected', 'false');
     editor.focus();
@@ -792,33 +836,6 @@ function insertQuick(item) {
   editor.setSelectionRange(pos, pos);
 }
 
-function keyboardHeight() {
-  if (!window.visualViewport) return 0;
-  return window.innerHeight - window.visualViewport.height - window.visualViewport.offsetTop;
-}
-function showQuickbar() { quickbar.classList.add('show'); updateQuickbarPos(); }
-function hideQuickbar() { quickbar.classList.remove('show'); }
-function updateQuickbarPos() {
-  const kb = keyboardHeight();
-  quickbar.style.bottom = (kb > 80 ? kb : 0) + 'px';
-}
-function refreshQuickbar() {
-  // 只在输入框聚焦且键盘打开时显示
-  if (document.activeElement === editor && !isPreview && keyboardHeight() > 80) showQuickbar();
-  else hideQuickbar();
-}
-function setupQuickbar() {
-  if (!isTouch) return;
-  renderQuickbar();
-  editor.addEventListener('focus', refreshQuickbar);
-  editor.addEventListener('blur', hideQuickbar);
-  titleInput.addEventListener('focus', hideQuickbar);
-  if (window.visualViewport) {
-    window.visualViewport.addEventListener('resize', refreshQuickbar);
-    window.visualViewport.addEventListener('scroll', refreshQuickbar);
-  }
-}
-
 /* 沉浸写作：向下滚动隐藏工具栏/底栏，向上滚动恢复 */
 let lastScrollTop = 0;
 function setupImmersive() {
@@ -827,7 +844,6 @@ function setupImmersive() {
     const delta = st - lastScrollTop;
     if (delta > 4 && st > 30) {
       editorView.classList.add('immersive');
-      hideQuickbar();
     } else if (delta < -4) {
       editorView.classList.remove('immersive');
     }
@@ -928,9 +944,12 @@ async function insertLocalImage(file) {
   toast('正在压缩图片…');
   try {
     const dataUrl = await resizeImage(file);
+    const id = uid();
+    await putImage(id, dataUrl);
+    imageCache[id] = dataUrl;
     const name = (file.name || '图片').replace(/\.[^.]+$/, '');
     const s = getSel();
-    replaceSelection('![' + name + '](' + dataUrl + ')', s.start, s.end);
+    replaceSelection('![' + name + '](zhimo://' + id + ')', s.start, s.end);
     toast('图片已插入');
   } catch (e) {
     toast('图片处理失败');
@@ -1004,7 +1023,7 @@ function openEditorMenu() {
 /* ---------------- 导出 / 导入 ---------------- */
 function exportCurrent() {
   const n = notes.find((x) => x.id === currentId) || { title: titleInput.value, content: editor.value };
-  let text = n.content || '';
+  let text = resolveImagesInText(n.content || '');
   if (n.title && !/^\s*#\s/.test(text)) text = '# ' + n.title + '\n\n' + text;
   const name = sanitizeFilename(n.title);
   download(name + '.md', text);
@@ -1040,14 +1059,15 @@ function exportPDF() {
 
 function exportAll() {
   if (!notes.length) { toast('没有可导出的笔记'); return; }
-  const body = notes.map((n) => `# ${n.title || '无标题'}\n\n${n.content || ''}`).join('\n\n---\n\n');
+  const body = notes.map((n) => `# ${n.title || '无标题'}\n\n${resolveImagesInText(n.content || '')}`).join('\n\n---\n\n');
   const date = new Date().toISOString().slice(0, 10);
   download(`纸墨笔记-${date}.md`, body);
   toast(`已导出 ${notes.length} 篇`);
 }
 
 function backupJSON() {
-  const data = { app: '纸墨', version: 1, exportedAt: new Date().toISOString(), notes };
+  const images = Object.entries(imageCache).map(([id, dataUrl]) => ({ id, dataUrl }));
+  const data = { app: '纸墨', version: 2, exportedAt: new Date().toISOString(), notes, images };
   const date = new Date().toISOString().slice(0, 10);
   download(`纸墨备份-${date}.json`, JSON.stringify(data, null, 2), 'application/json;charset=utf-8');
   toast('已备份为 JSON');
@@ -1083,6 +1103,16 @@ function restoreJSON(file) {
             id: n.id || uid(), title: n.title || '', content: n.content || '',
             createdAt: n.createdAt || Date.now(), updatedAt: n.updatedAt || Date.now()
           });
+        }
+        // 恢复图片
+        await clearAllImages();
+        Object.keys(imageCache).forEach((k) => delete imageCache[k]);
+        const images = Array.isArray(data.images) ? data.images : [];
+        for (const img of images) {
+          if (img && img.id && img.dataUrl) {
+            await putImage(img.id, img.dataUrl);
+            imageCache[img.id] = img.dataUrl;
+          }
         }
         if (currentId) { currentId = null; clearTimeout(saveTimer); }
         editorView.classList.remove('active');
@@ -1276,9 +1306,10 @@ async function init() {
   if (verEl) verEl.textContent = APP_VERSION;
   bindEvents();
   db = await openDB();
+  await loadImageCache();
   await purgeOldTrash();
   await renderList();
-  setupQuickbar();
+  renderQuickbar();
   setupImmersive();
   registerSW();
 

@@ -2,7 +2,7 @@
 <html lang="zh-CN">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content">
   <meta name="theme-color" content="#FDFBF7">
   <meta name="description" content="纸墨 —— 离线 Markdown 笔记编辑器，可安装到手机主屏幕">
   <title>纸墨 · 离线笔记</title>
@@ -65,6 +65,8 @@
       <div id="preview" class="preview markdown-body" hidden></div>
     </div>
 
+    <div id="quickbar" class="quickbar" role="toolbar" aria-label="Markdown 快捷符号"></div>
+
     <footer class="editor-footer">
       <div class="segmented" role="tablist" aria-label="编辑 / 预览切换">
         <button id="btn-edit-mode" class="seg" role="tab" aria-selected="true">编辑</button>
@@ -77,9 +79,6 @@
       </div>
     </footer>
   </main>
-
-  <!-- ===================== 键盘上方快捷符号栏 ===================== -->
-  <div id="quickbar" class="quickbar" role="toolbar" aria-label="Markdown 快捷符号"></div>
 
   <!-- ===================== 底部操作面板 ===================== -->
   <div id="sheet-backdrop" class="backdrop" hidden></div>

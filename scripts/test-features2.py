@@ -68,7 +68,13 @@ with sync_playwright() as p:
     page.set_input_files("#file-image", "icons/icon-192.png")
     page.wait_for_timeout(1200)
     val = page.input_value("#editor")
-    check("本地图片插入(压缩为jpeg)", "data:image/jpeg" in val, val[:50])
+    check("正文只存短标记(zhimo://)", "zhimo://" in val, val[:60])
+    check("正文不含巨长base64", len(val) < 200, "长度=" + str(len(val)))
+    # 预览应解析出真实图片
+    page.click("#btn-preview-mode")
+    page.wait_for_selector("#preview:not([hidden])")
+    html = page.locator("#preview").inner_html()
+    check("预览解析出真实图片", "data:image/jpeg" in html)
 
     browser.close()
 
